@@ -1,0 +1,104 @@
+name: vod-manager
+services:
+
+  frontend:
+    build:
+      context: frontend
+      target: development
+    ports:
+      - 80:80
+    networks:
+      - server-side
+    volumes:
+      - ./frontend/src:/code/src:ro
+      - video-data:/videos:ro
+
+  backend:
+    build:
+      context: backend
+      # target: builder
+    # container_name: fastapi-application
+    environment:
+      - VODM_PORT=8000
+      - VODM_PG_DBNAME=${PG_DB:-vodmanager}
+      - VODM_PG_HOST=db
+      - VODM_PG_USER=${PG_USER:-vodmanager}
+      - VODM_PG_PASSWORD=${PG_PASSWORD:?database password required}
+      - VODM_REDIS_HOST=${VODM_REDIS_HOST}
+      - VODM_REDIS_PORT=${VODM_REDIS_PORT:-6379}
+      # - VODM_OLLAMA_HOST=ollama
+      - VODM_RENDER_OUTPUT_FOLDER=${VODM_RENDER_OUTPUT_FOLDER:-Rendered}
+      - VODM_CORE_VIDEO_FOLDER=/videos
+      - VODM_CORE_CACHE_FOLDER=/videocache
+    restart: "no"
+    networks:
+      - server-side
+    volumes:
+      - ./backend/src:/code/src:ro
+      - backend-cache:/code/target
+      - video-data:/videos
+      - render-cache:/videocache
+    env_file: .env
+    depends_on:
+      - db
+  
+  worker:
+    build:
+      context: worker
+      # target: builder
+    environment:
+      - VODM_PG_DBNAME=${PG_DB:-vodmanager}
+      - VODM_PG_HOST=vodm_db
+      - VODM_PG_USER=${PG_USER:-vodmanager}
+      - VODM_PG_PASSWORD=${PG_PASSWORD:?database password required}
+      - VODM_REDIS_HOST=${VODM_REDIS_HOST}
+      - VODM_REDIS_PORT=${VODM_REDIS_PORT:-6379}
+      - VODM_WORKER_RENDER_PROCS=${VODM_WORKER_RENDER_PROCS:-1}
+      - VODM_WORKER_AUDIO_ALIGN_PROCS=${VODM_WORKER_AUDIO_ALIGN_PROCS:-1}
+      - VODM_WORKER_LIVE_CAPTURE_PROCS=${VODM_WORKER_LIVE_CAPTURE_PROCS:-3}
+      - VODM_CORE_VIDEO_FOLDER=/videos
+      - VODM_CORE_CACHE_FOLDER=/videocache
+    networks:
+      - server-side
+    volumes:
+      - video-data:/videos
+      - render-cache:/videocache
+    env_file: .env
+
+  db:
+    image: postgres:17-alpine
+    container_name: vodm_pg
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=${PG_PASSWORD:?database password required}
+      - POSTGRES_USER=${PG_USER:-vodmanager}
+      - POSTGRES_DB=${PG_DB:-vodmanager}
+    networks:
+      - server-side
+    volumes:
+      - ./db-data:/var/lib/postgresql/data
+    env_file:
+      - .env
+  
+  redis:
+    image: redis
+    container_name: vodm_redis
+    restart: always
+    networks:
+      - server-side
+
+
+volumes:
+  video-data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /mnt/pool2/media/Twitch Downloads/
+  
+  render-cache:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /mnt/ssdpool1/rendercache/

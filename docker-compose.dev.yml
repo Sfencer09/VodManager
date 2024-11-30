@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  server:
+    container_name: vodm_server
+    build:
+      context: server
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - ./server:/app
+      - ./server/node_modules:/app/node_modules
+      - "/mnt/pool2/media/Twitch Downloads:/video-files:ro"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.dev
+      - .env
+    command: npm run dev -- -H 0.0.0.0
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    env_file:
+      - .env.dev
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: pgadmin
+  #   restart: always
+  #   env_file:
+  #     - .env.dev
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - ./pgadmin_data:/var/lib/pgadmin
